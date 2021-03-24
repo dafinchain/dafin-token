@@ -1,4 +1,4 @@
-pragma solidity 0.5.7;
+pragma solidity 0.5.6;
 
 
 
@@ -14,43 +14,6 @@ contract IERC20 {
   event Transfer(address indexed from, address indexed to, uint256 value);
   event Approval(address indexed owner, address indexed spender, uint256 value);
   event Burn(address indexed burner, uint256 value);
-}
-
-
-
-
-// SafeERC20
-library SafeERC20 {
-  function safeTransfer(
-    IERC20 _token,
-    address _to,
-    uint256 _value
-  )
-    internal
-  {
-    require(_token.transfer(_to, _value));
-  }
-
-  function safeTransferFrom(
-    ERC20 _token,
-    address _from,
-    address _to,
-    uint256 _value
-  )
-    internal
-  {
-    require(_token.transferFrom(_from, _to, _value));
-  }
-
-  function safeApprove(
-    ERC20 _token,
-    address _spender,
-    uint256 _value
-  )
-    internal
-  {
-    require(_token.approve(_spender, _value));
-  }
 }
 
 
@@ -75,7 +38,7 @@ contract Ownable {
   }
 
   modifier onlyOwnerOrAdmin() {
-    require(msg.sender != address(0) && (msg.sender == owner || msg.sender == admin));
+    require((msg.sender == owner || msg.sender == admin));
     _;
   }
 
@@ -107,8 +70,8 @@ contract ERC20 is IERC20, Ownable {
     mapping (address => uint256) private _balances;
     mapping(address => bool) internal locks;
     mapping (address => mapping (address => uint256)) private _allowed;
-
-    uint256 public Max_supply = 10000000000 * (10 ** 18);
+    
+    uint256 public Max_supply = 10000000000 * (10 ** 8);
     uint256 private _totalSupply;
 
     function totalSupply() public view returns (uint256) {
@@ -130,7 +93,7 @@ contract ERC20 is IERC20, Ownable {
         _transfer(msg.sender, to, value);
         return true;
     }
-
+    
     function _transfer(address from, address to, uint256 value) internal {
         require(to != address(0));
         require(locks[msg.sender] == false);
@@ -138,13 +101,13 @@ contract ERC20 is IERC20, Ownable {
         _balances[to] = _balances[to].add(value);
         emit Transfer(from, to, value);
     }
-
+    
 
     function approve(address spender, uint256 value) public returns (bool) {
         _approve(msg.sender, spender, value);
         return true;
     }
-
+    
     function _approve(address owner, address spender, uint256 value) internal {
         require(spender != address(0));
         require(owner != address(0));
@@ -174,26 +137,26 @@ contract ERC20 is IERC20, Ownable {
 
     function _mint(address account, uint256 value) internal {
         require(account != address(0));
-        require(Max_supply > _totalSupply);
+        require(Max_supply >= _totalSupply.add(value));
         _totalSupply = _totalSupply.add(value);
         _balances[account] = _balances[account].add(value);
         emit Transfer(address(0), account, value);
     }
-
-
-    function burn(address from, uint256 value) public {
+    
+    
+    function burn(address from, uint256 value) public onlyOwner {
         _burn(from, value);
     }
-
+    
 
     function _burn(address account, uint256 value) internal {
         require(account != address(0));
-
+        
         _totalSupply = _totalSupply.sub(value);
         _balances[account] = _balances[account].sub(value);
         emit Transfer(account, address(0), value);
     }
-
+    
 
     function lock(address _owner) public onlyOwner returns (bool) {
         require(locks[_owner] == false);
@@ -256,7 +219,7 @@ contract ERC20Detailed is IERC20 {
         _symbol = symbol;
         _decimals = decimals;
     }
-
+    
     function decimals() public view returns (uint8) {
         return _decimals;
     }
@@ -431,167 +394,6 @@ contract ERC20Pausable is ERC20, Pausable {
 
 
 
-// Snapshot part
-library Arrays {
-
-    function findUpperBound(uint256[] storage array, uint256 element) internal view returns (uint256) {
-        if (array.length == 0) {
-            return 0;
-        }
-
-        uint256 low = 0;
-        uint256 high = array.length;
-
-        while (low < high) {
-            uint256 mid = Math.average(low, high);
-
-            if (array[mid] > element) {
-                high = mid;
-            } else {
-                low = mid + 1;
-            }
-        }
-
-
-        if (low > 0 && array[low - 1] == element) {
-            return low - 1;
-        } else {
-            return low;
-        }
-    }
-}
-
-
-
-
-library Counters {
-    using SafeMath for uint256;
-
-    struct Counter {
-
-        uint256 _value;
-    }
-
-    function current(Counter storage counter) internal view returns (uint256) {
-        return counter._value;
-    }
-
-    function increment(Counter storage counter) internal {
-        counter._value += 1;
-    }
-
-    function decrement(Counter storage counter) internal {
-        counter._value = counter._value.sub(1);
-    }
-}
-
-
-
-
-contract ERC20Snapshot is ERC20 {
-    using SafeMath for uint256;
-    using Arrays for uint256[];
-    using Counters for Counters.Counter;
-
-
-    struct Snapshots {
-        uint256[] ids;
-        uint256[] values;
-    }
-
-    mapping (address => Snapshots) private _accountBalanceSnapshots;
-    Snapshots private _totalSupplySnaphots;
-
-
-    Counters.Counter private _currentSnapshotId;
-
-    event Snapshot(uint256 id);
-
-
-    function snapshot() public returns (uint256) {
-        _currentSnapshotId.increment();
-
-        uint256 currentId = _currentSnapshotId.current();
-        emit Snapshot(currentId);
-        return currentId;
-    }
-
-    function balanceOfAt(address account, uint256 snapshotId) public view returns (uint256) {
-        (bool snapshotted, uint256 value) = _valueAt(snapshotId, _accountBalanceSnapshots[account]);
-
-        return snapshotted ? value : balanceOf(account);
-    }
-
-    function totalSupplyAt(uint256 snapshotId) public view returns(uint256) {
-        (bool snapshotted, uint256 value) = _valueAt(snapshotId, _totalSupplySnaphots);
-
-        return snapshotted ? value : totalSupply();
-    }
-
-
-    function _transfer(address from, address to, uint256 value) internal {
-        _updateAccountSnapshot(from);
-        _updateAccountSnapshot(to);
-
-        super._transfer(from, to, value);
-    }
-
-    function _mint(address account, uint256 value) internal {
-        _updateAccountSnapshot(account);
-        _updateTotalSupplySnapshot();
-
-        super._mint(account, value);
-    }
-
-    function _burn(address account, uint256 value) internal {
-        _updateAccountSnapshot(account);
-        _updateTotalSupplySnapshot();
-
-        super._burn(account, value);
-    }
-
-
-    function _valueAt(uint256 snapshotId, Snapshots storage snapshots)
-        private view returns (bool, uint256)
-    {
-        require(snapshotId > 0);
-        require(snapshotId <= _currentSnapshotId.current());
-
-        uint256 index = snapshots.ids.findUpperBound(snapshotId);
-
-        if (index == snapshots.ids.length) {
-            return (false, 0);
-        } else {
-            return (true, snapshots.values[index]);
-        }
-    }
-
-    function _updateAccountSnapshot(address account) private {
-        _updateSnapshot(_accountBalanceSnapshots[account], balanceOf(account));
-    }
-
-    function _updateTotalSupplySnapshot() private {
-        _updateSnapshot(_totalSupplySnaphots, totalSupply());
-    }
-
-    function _updateSnapshot(Snapshots storage snapshots, uint256 currentValue) private {
-        uint256 currentId = _currentSnapshotId.current();
-        if (_lastSnapshotId(snapshots.ids) < currentId) {
-            snapshots.ids.push(currentId);
-            snapshots.values.push(currentValue);
-        }
-    }
-
-    function _lastSnapshotId(uint256[] storage ids) private view returns (uint256) {
-        if (ids.length == 0) {
-            return 0;
-        } else {
-            return ids[ids.length - 1];
-        }
-    }
-}
-
-
 
 // Mintable part
 contract MinterRole {
@@ -647,15 +449,16 @@ contract ERC20Mintable is ERC20, MinterRole {
 
 
 // Token detailed
-contract DAFIN is ERC20, ERC20Detailed, ERC20Snapshot, ERC20Pausable, ERC20Mintable {
-
+contract DAFIN is ERC20, ERC20Detailed, ERC20Pausable, ERC20Mintable {
+    
     string public constant name = "DAFIN";
     string public constant symbol = "DAF";
+    
     uint8 public constant DECIMALS = 18;
     uint256 public constant INITIAL_SUPPLY = 300000000 * (10 ** uint256(DECIMALS));
 
     constructor () public ERC20Detailed(name, symbol, DECIMALS) {
         _mint(msg.sender, INITIAL_SUPPLY);
     }
-
+  
 }
