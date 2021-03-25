@@ -71,7 +71,7 @@ contract ERC20 is IERC20, Ownable {
     mapping(address => bool) internal locks;
     mapping (address => mapping (address => uint256)) private _allowed;
     
-    uint256 public Max_supply = 10000000000 * (10 ** 8);
+    uint256 public Max_supply = 10000000000 * (10 ** 18);
     uint256 private _totalSupply;
 
     function totalSupply() public view returns (uint256) {
